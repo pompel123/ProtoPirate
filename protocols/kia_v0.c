@@ -232,27 +232,21 @@ SubGhzProtocolStatus subghz_protocol_encoder_kia_deserialize(void *context, Flip
         }
 
         // Read or extract button
-        uint32_t btn_temp;
-        if (flipper_format_read_uint32(flipper_format, "Btn", &btn_temp, 1))
-        {
+        uint32_t btn_temp = 0;
+        if(flipper_format_read_uint32(flipper_format, "Btn", &btn_temp, 1)) {
             instance->button = (uint8_t)btn_temp;
             FURI_LOG_I(TAG, "Read button: 0x%02X", instance->button);
-        }
-        else
-        {
+        } else {
             instance->button = (key >> 8) & 0x0F;
             FURI_LOG_I(TAG, "Extracted button: 0x%02X", instance->button);
         }
 
         // Read or extract counter
-        uint32_t cnt_temp;
-        if (flipper_format_read_uint32(flipper_format, "Cnt", &cnt_temp, 1))
-        {
+        uint32_t cnt_temp = 0;
+        if(flipper_format_read_uint32(flipper_format, "Cnt", &cnt_temp, 1)) {
             instance->counter = (uint16_t)cnt_temp;
             FURI_LOG_I(TAG, "Read counter: 0x%04X", instance->counter);
-        }
-        else
-        {
+        } else {
             instance->counter = (key >> 40) & 0xFFFF;
             FURI_LOG_I(TAG, "Extracted counter: 0x%04X", instance->counter);
         }

@@ -338,8 +338,22 @@ SubGhzProtocolStatus
     kia_protocol_decoder_v3_v4_deserialize(void* context, FlipperFormat* flipper_format) {
     furi_assert(context);
     SubGhzProtocolDecoderKiaV3V4* instance = context;
-    return subghz_block_generic_deserialize_check_count_bit(
+    SubGhzProtocolStatus result = subghz_block_generic_deserialize_check_count_bit(
         &instance->generic, flipper_format, kia_protocol_v3_v4_const.min_count_bit_for_found);
+
+    if(result == SubGhzProtocolStatusOk) {
+        flipper_format_read_uint32(flipper_format, "Encrypted", &instance->encrypted, 1);
+        flipper_format_read_uint32(flipper_format, "Decrypted", &instance->decrypted, 1);
+
+        uint32_t temp_version = 0;
+        if(flipper_format_read_uint32(flipper_format, "Version", &temp_version, 1)) {
+            instance->version = (uint8_t)temp_version;
+        } else {
+            instance->version = 0;
+        }
+    }
+
+    return result;
 }
 
 void kia_protocol_decoder_v3_v4_get_string(void* context, FuriString* output) {
@@ -405,11 +419,12 @@ SubGhzProtocolStatus
     }
 
     // Read the version, defaulting to V4 (0) if not present
-    uint32_t version = 0;
-    if(!flipper_format_read_uint32(flipper_format, "Version", &version, 1)) {
-        version = 0;
+    uint32_t version_temp = 0;
+    if(flipper_format_read_uint32(flipper_format, "Version", &version_temp, 1)) {
+        instance->version = (uint8_t)version_temp;
+    } else {
+        instance->version = 0; // Default to V4
     }
-    instance->version = (uint8_t)version;
 
     // Reconstruct the decrypted data from the saved fields
     // Decrypted: [Btn(4) | SerialLSB(8) | Cnt(16)] - standard Keeloq packing (often reversed check)

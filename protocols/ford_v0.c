@@ -540,11 +540,19 @@ SubGhzProtocolStatus subghz_protocol_encoder_ford_v0_deserialize(void* context, 
         return SubGhzProtocolStatusError;
     }
 
+    uint32_t temp_btn = 0;
+    uint32_t temp_bs = 0;
+    uint32_t temp_crc = 0;
+
     if (!flipper_format_read_uint32(flipper_format, "Serial", &instance->serial, 1) ||
-        !flipper_format_read_uint32(flipper_format, "Btn", (uint32_t*)&instance->button, 1) ||
+        !flipper_format_read_uint32(flipper_format, "Btn", &temp_btn, 1) ||
         !flipper_format_read_uint32(flipper_format, "Cnt", &instance->count, 1) ||
-        !flipper_format_read_uint32(flipper_format, "BS", (uint32_t*)&instance->byte_select, 1) ||
-        !flipper_format_read_uint32(flipper_format, "CRC", (uint32_t*)&instance->checksum, 1)) {
+        !flipper_format_read_uint32(flipper_format, "BS", &temp_bs, 1) ||
+        !flipper_format_read_uint32(flipper_format, "CRC", &temp_crc, 1)) {
+
+        instance->button = (uint8_t)temp_btn;
+        instance->byte_select = (uint8_t)temp_bs;
+        instance->checksum = (uint8_t)temp_crc;
 
         // Fallback to decoding from raw key if fields are missing
         uint64_t key1 = instance->generic.data;

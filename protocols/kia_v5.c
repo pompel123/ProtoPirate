@@ -30,6 +30,7 @@ typedef enum
     KiaV5EncoderStepReset = 0,
     KiaV5EncoderStepPreamble,
     KiaV5EncoderStepSync,
+    KiaV5EncoderStepStart,
     KiaV5EncoderStepData,
     KiaV5EncoderStepStop,
 } KiaV5EncoderStep;
@@ -471,11 +472,12 @@ SubGhzProtocolStatus kia_protocol_encoder_v5_deserialize(void *context, FlipperF
 {
     furi_assert(context);
     SubGhzProtocolEncoderKiaV5 *instance = context;
-    SubGhzProtocolStatus ret = subghz_block_generic_deserialize_check_count_bit(
-        &instance->generic, flipper_format, kia_protocol_v5_const.min_count_bit_for_found);
+    SubGhzProtocolStatus ret = SubGhzProtocolStatusError;
 
-    if (ret == SubGhzProtocolStatusOk)
+    if(subghz_block_generic_deserialize_check_count_bit(
+           &instance->generic, flipper_format, kia_protocol_v5_const.min_count_bit_for_found))
     {
+        ret = SubGhzProtocolStatusOk;
         uint32_t temp_val;
         // Restore raw data for exact replay if available
         if (flipper_format_read_uint32(flipper_format, "DataHi", &temp_val, 1))
@@ -540,8 +542,8 @@ LevelDuration kia_protocol_encoder_v5_yield(void *context)
         instance->step = KiaV5EncoderStepPreamble;
         // fallthrough
     case KiaV5EncoderStepPreamble:
-        if (instance->preamble_count < 84)
-        { // 42 pairs
+        if (instance->preamble_count < 85)
+        { // 42 pairs + 1 high
             if (instance->preamble_count % 2 == 0)
             {
                 instance->preamble_count++;
@@ -559,8 +561,14 @@ LevelDuration kia_protocol_encoder_v5_yield(void *context)
         }
         // fallthrough
     case KiaV5EncoderStepSync:
-        instance->step = KiaV5EncoderStepData;
+        instance->step = KiaV5EncoderStepStart;
         return level_duration_make(false, te_long);
+
+    case KiaV5EncoderStepStart:
+        // Inject 2 start bits (High, Low) to skip decoder offset and prevent sync merge
+        instance->manchester_pulse = level_duration_make(false, te_short);
+        instance->step = KiaV5EncoderStepData;
+        return level_duration_make(true, te_short);
 
     case KiaV5EncoderStepData:
         if (instance->manchester_pulse.duration > 0)

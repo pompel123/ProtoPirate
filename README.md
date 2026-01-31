@@ -1,6 +1,8 @@
 # **ProtoPirate**
 
 ### _for Flipper Zero_
+just take it down with stupid dmca notice. no one used ur code mate
+
 
 ProtoPirate is an experimental rolling-code analysis toolkit developed by members of **The Pirates' Plunder**.
 The app currently supports decoding for multiple automotive key-fob families (Kia, Ford, Subaru, Suzuki, VW, and more), with the goal of being a drop-in Flipper app (.fap) that is free, open source, and can be used on any Flipper Zero firmware.

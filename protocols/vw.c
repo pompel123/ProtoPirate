@@ -1,9 +1,4 @@
 #include "vw.h"
-#include <lib/subghz/blocks/const.h>
-#include <lib/subghz/blocks/decoder.h>
-#include <lib/subghz/blocks/encoder.h>
-#include <lib/subghz/blocks/generic.h>
-#include <lib/subghz/blocks/math.h>
 
 #define TAG "VWProtocol"
 
@@ -24,26 +19,11 @@ typedef struct SubGhzProtocolDecoderVw
     uint64_t data_2; // Additional 16 bits (type byte + check byte)
 } SubGhzProtocolDecoderVw;
 
-typedef enum
-{
-    VwEncoderStepReset = 0,
-    VwEncoderStepSync,
-    VwEncoderStepStart,
-    VwEncoderStepData,
-    VwEncoderStepStop,
-} VwEncoderStep;
-
 typedef struct SubGhzProtocolEncoderVw
 {
     SubGhzProtocolEncoderBase base;
     SubGhzProtocolBlockEncoder encoder;
     SubGhzBlockGeneric generic;
-
-    VwEncoderStep step;
-    uint8_t sync_count;
-    uint8_t data_bit_index;
-    LevelDuration manchester_pulse;
-    uint64_t data_2; // For Type and Check bytes
 } SubGhzProtocolEncoderVw;
 
 typedef enum
@@ -67,25 +47,18 @@ const SubGhzProtocolDecoder subghz_protocol_vw_decoder = {
     .get_string = subghz_protocol_decoder_vw_get_string,
 };
 
-// Encoder forward declarations
-void *subghz_protocol_encoder_vw_alloc(SubGhzEnvironment *environment);
-void subghz_protocol_encoder_vw_free(void *context);
-SubGhzProtocolStatus subghz_protocol_encoder_vw_deserialize(void *context, FlipperFormat *flipper_format);
-void subghz_protocol_encoder_vw_stop(void *context);
-LevelDuration subghz_protocol_encoder_vw_yield(void *context);
-
 const SubGhzProtocolEncoder subghz_protocol_vw_encoder = {
-    .alloc = subghz_protocol_encoder_vw_alloc,
-    .free = subghz_protocol_encoder_vw_free,
-    .deserialize = subghz_protocol_encoder_vw_deserialize,
-    .stop = subghz_protocol_encoder_vw_stop,
-    .yield = subghz_protocol_encoder_vw_yield,
+    .alloc = NULL,
+    .free = NULL,
+    .deserialize = NULL,
+    .stop = NULL,
+    .yield = NULL,
 };
 
 const SubGhzProtocol vw_protocol = {
     .name = VW_PROTOCOL_NAME,
     .type = SubGhzProtocolTypeDynamic,
-    .flag = SubGhzProtocolFlag_433 | SubGhzProtocolFlag_AM | SubGhzProtocolFlag_Decodable | SubGhzProtocolFlag_Send,
+    .flag = SubGhzProtocolFlag_433 | SubGhzProtocolFlag_AM | SubGhzProtocolFlag_Decodable,
     .decoder = &subghz_protocol_vw_decoder,
     .encoder = &subghz_protocol_vw_encoder,
 };
@@ -432,22 +405,8 @@ SubGhzProtocolStatus subghz_protocol_decoder_vw_deserialize(void *context, Flipp
 {
     furi_assert(context);
     SubGhzProtocolDecoderVw *instance = context;
-    SubGhzProtocolStatus ret = subghz_block_generic_deserialize_check_count_bit(
+    return subghz_block_generic_deserialize_check_count_bit(
         &instance->generic, flipper_format, subghz_protocol_vw_const.min_count_bit_for_found);
-
-    if (ret == SubGhzProtocolStatusOk)
-    {
-        uint32_t temp_val;
-        if (flipper_format_read_uint32(flipper_format, "Type", &temp_val, 1))
-        {
-            instance->data_2 |= (temp_val << 8);
-        }
-        if (flipper_format_read_uint32(flipper_format, "Check", &temp_val, 1))
-        {
-            instance->data_2 |= temp_val;
-        }
-    }
-    return ret;
 }
 
 static const char *vw_get_button_name(uint8_t btn)
@@ -501,168 +460,4 @@ void subghz_protocol_decoder_vw_get_string(void *context, FuriString *output)
         type,
         btn,
         vw_get_button_name(btn));
-}
-
-// Encoder implementation
-void *subghz_protocol_encoder_vw_alloc(SubGhzEnvironment *environment)
-{
-    UNUSED(environment);
-    SubGhzProtocolEncoderVw *instance = malloc(sizeof(SubGhzProtocolEncoderVw));
-    instance->base.protocol = &vw_protocol;
-    instance->step = VwEncoderStepReset;
-    return instance;
-}
-
-void subghz_protocol_encoder_vw_free(void *context)
-{
-    furi_assert(context);
-    SubGhzProtocolEncoderVw *instance = context;
-    free(instance);
-}
-
-SubGhzProtocolStatus subghz_protocol_encoder_vw_deserialize(void *context, FlipperFormat *flipper_format)
-{
-    furi_assert(context);
-    SubGhzProtocolEncoderVw *instance = context;
-    SubGhzProtocolStatus ret = subghz_block_generic_deserialize_check_count_bit(
-        &instance->generic, flipper_format, subghz_protocol_vw_const.min_count_bit_for_found);
-
-    if (ret == SubGhzProtocolStatusOk)
-    {
-        uint32_t temp_val;
-        if (!flipper_format_read_uint32(flipper_format, "Type", &temp_val, 1))
-            return SubGhzProtocolStatusError;
-        instance->data_2 |= (temp_val << 8);
-        if (!flipper_format_read_uint32(flipper_format, "Check", &temp_val, 1))
-            return SubGhzProtocolStatusError;
-        instance->data_2 |= temp_val;
-    }
-    return ret;
-}
-
-void subghz_protocol_encoder_vw_stop(void *context)
-{
-    furi_assert(context);
-    SubGhzProtocolEncoderVw *instance = context;
-    instance->step = VwEncoderStepStop;
-}
-
-LevelDuration subghz_protocol_encoder_vw_yield(void *context)
-{
-    furi_assert(context);
-    SubGhzProtocolEncoderVw *instance = context;
-
-    uint32_t te_short = subghz_protocol_vw_const.te_short;
-    uint32_t te_long = subghz_protocol_vw_const.te_long;
-    uint32_t te_med = (te_long + te_short) / 2;
-
-    switch (instance->step)
-    {
-    case VwEncoderStepReset:
-        instance->sync_count = 0;
-        instance->data_bit_index = 0;
-        instance->manchester_pulse.duration = 0;
-        instance->step = VwEncoderStepSync;
-        // fallthrough
-    case VwEncoderStepSync:
-        if (instance->sync_count < 86)
-        { // 43 pairs
-            if (instance->sync_count % 2 == 0)
-            {
-                instance->sync_count++;
-                return level_duration_make(true, te_short);
-            }
-            else
-            {
-                instance->sync_count++;
-                return level_duration_make(false, te_short);
-            }
-        }
-        else
-        {
-            instance->step = VwEncoderStepStart;
-        }
-        // fallthrough
-    case VwEncoderStepStart:
-        if (instance->sync_count == 86)
-        {
-            instance->sync_count++;
-            return level_duration_make(true, te_long);
-        }
-        else if (instance->sync_count == 87)
-        {
-            instance->sync_count++;
-            return level_duration_make(false, te_short);
-        }
-        else if (instance->sync_count < 92)
-        { // 2 pairs of med H/L
-            if (instance->sync_count % 2 == 0)
-            {
-                instance->sync_count++;
-                return level_duration_make(true, te_med);
-            }
-            else
-            {
-                instance->sync_count++;
-                return level_duration_make(false, te_med);
-            }
-        }
-        else
-        {
-            instance->step = VwEncoderStepData;
-            return level_duration_make(true, te_short); // Start of data
-        }
-
-    case VwEncoderStepData:
-        if (instance->manchester_pulse.duration > 0)
-        {
-            LevelDuration pulse = instance->manchester_pulse;
-            instance->manchester_pulse.duration = 0;
-            return pulse;
-        }
-        if (instance->data_bit_index < 80)
-        {
-            // Calculate which bit of the stream we are sending (MSB first)
-            uint8_t stream_bit_pos = 79 - instance->data_bit_index;
-            bool bit = false;
-
-            // Map stream bit position to storage fields based on decoder logic:
-            // Bits 79..72 -> data_2 bits 15..8 (Type)
-            // Bits 71..8  -> generic.data bits 63..0 (Key)
-            // Bits 7..0   -> data_2 bits 7..0 (Check/Btn)
-
-            if (stream_bit_pos >= 72)
-            {
-                bit = (instance->data_2 >> (stream_bit_pos - 64)) & 1;
-            }
-            else if (stream_bit_pos >= 8)
-            {
-                bit = (instance->generic.data >> (stream_bit_pos - 8)) & 1;
-            }
-            else
-            {
-                bit = (instance->data_2 >> stream_bit_pos) & 1;
-            }
-
-            instance->data_bit_index++;
-            if (bit)
-            {
-                instance->manchester_pulse = level_duration_make(false, te_short);
-                return level_duration_make(true, te_short);
-            }
-            else
-            {
-                instance->manchester_pulse = level_duration_make(true, te_short);
-                return level_duration_make(false, te_short);
-            }
-        }
-        else
-        {
-            instance->step = VwEncoderStepStop;
-        }
-        // fallthrough
-    case VwEncoderStepStop:
-        return level_duration_reset();
-    }
-    return level_duration_reset();
 }

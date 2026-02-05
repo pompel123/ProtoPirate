@@ -32,6 +32,6 @@
 #include "fiat_v0.h"
 
 // American manufacturers
-#include "tesla.h"
+
 
 extern const SubGhzProtocolRegistry protopirate_protocol_registry;

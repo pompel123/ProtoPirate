@@ -29,7 +29,7 @@ const SubGhzProtocol* protopirate_protocol_registry_items[] = {
     &fiat_protocol_v0,
     
     // American
-    &tesla_protocol,
+    
 };
 
 const SubGhzProtocolRegistry protopirate_protocol_registry = {
